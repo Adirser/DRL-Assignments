@@ -5,22 +5,21 @@ import numpy as np
 import random
 from collections import deque
 import gymnasium as gym
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
+from tensorflow.summary import create_file_writer
 
-RENDER = True
+RENDER = False
 
 hidden_layers_3 = [64, 64, 64]  # For the 3 hidden layer network
 hidden_layers_5 = [64, 64, 64, 64, 64]  # For the 5 hidden layer network
-n_episodes = 500
-batch_size = 128
+n_episodes = 1000
+batch_size = 256
 gamma = 0.99
 epsilon_start = 1.0
 epsilon_end = 0.1
 epsilon_decay = 0.995
 learning_rate = 0.001
-update_freq = 25
+update_freq = 10
+log_dir = "logs/DQN"
 
 
 class DQNAgent:
@@ -48,7 +47,7 @@ class DQNAgent:
             q_action = tf.reduce_sum(tf.multiply(q_values, masks), axis=1)
             loss = tf.keras.losses.MSE(updated_q_values, q_action)
         grads = tape.gradient(loss, self.policy_net.trainable_variables)
-        return grads
+        return grads, loss
 
 
 class ReplayBuffer:
@@ -84,9 +83,12 @@ def train_agent(
     epsilon_end,
     epsilon_decay,
     update_freq,
+    writer,
 ):
+    global_step = 0
     for episode in range(n_episodes):
         print(f"Episode {episode}")
+        total_reward = 0
         state = env.reset()[0]
         state = np.expand_dims(state, axis=0)
         epsilon = epsilon_start
@@ -97,6 +99,7 @@ def train_agent(
             next_state = np.expand_dims(next_state, axis=0)
             experience_replay.push(state, action, reward, next_state, done)
             state = next_state
+            total_reward += reward
 
             if done:
                 break
@@ -114,10 +117,19 @@ def train_agent(
                 future_q_values = agent.target_net.predict(next_states)
                 updated_q_values = rewards + gamma * np.max(future_q_values, axis=1) * (1 - dones)
 
-                grads = agent.train(states, actions, updated_q_values, env.action_space.n)
+                grads, loss = agent.train(states, actions, updated_q_values, env.action_space.n)
                 optimizer.apply_gradients(zip(grads, agent.policy_net.trainable_variables))
 
+                # Log training loss
+                with writer.as_default():
+                    tf.summary.scalar("Loss", loss, step=global_step)
+                global_step += 1
+
             epsilon = max(epsilon_end, epsilon_decay * epsilon)
+
+        # Log total reward after each episode
+        with writer.as_default():
+            tf.summary.scalar("Total Reward", total_reward, step=episode)
 
         # Update the target network
         if episode % update_freq == 0:
@@ -155,6 +167,7 @@ agent = DQNAgent(n_states, n_actions, hidden_layers_3)
 
 optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 experience_replay = ReplayBuffer(10000)
+writer = create_file_writer(log_dir)
 
 train_agent(
     env,
@@ -168,6 +181,7 @@ train_agent(
     epsilon_end,
     epsilon_decay,
     update_freq,
+    writer,
 )
 
 # Save the trained model
