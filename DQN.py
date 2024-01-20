@@ -10,16 +10,16 @@ from datetime import datetime
 
 RENDER = False
 MAX_STEPS = 10000
-hidden_layers_3 = [64, 64, 64]  # For the 3 hidden layer network
-hidden_layers_5 = [64, 64, 64, 64, 64]  # For the 5 hidden layer network
+hidden_layers_3 = [32, 32, 32]
+hidden_layers_5 = [64, 64, 64, 64, 64]
 n_episodes = 1000
-batch_size = 64
+batch_size = 256
 gamma = 0.99
 epsilon_start = 1.0
 epsilon_end = 0.05
-epsilon_decay = 0.997
+epsilon_decay = 0.97
 learning_rate = 0.001
-update_freq = 2000
+update_freq = 1000
 log_dir = f"logs/DQN_{datetime.now().strftime('%d%m%Y%H%M%S')}"
 steps_for_MA = 100
 
@@ -50,7 +50,7 @@ class DQNAgent:
             q_action = tf.reduce_sum(tf.multiply(q_values, masks), axis=1)
             loss = tf.keras.losses.MSE(updated_q_values, q_action)
         grads = tape.gradient(loss, self.policy_net.trainable_variables)
-        grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
+        # grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads] # Changed
         return grads, loss
 
 
@@ -91,13 +91,13 @@ def train_agent(
 ):
     global_step = 0
     steps_per_episode = deque(maxlen=steps_for_MA)  # Change 100 to your preferred window size
+    epsilon = epsilon_start
 
     for episode in range(n_episodes):
         total_reward = 0
         step = 0
         state = env.reset()[0]
         state = np.expand_dims(state, axis=0)
-        epsilon = epsilon_start
 
         while step < MAX_STEPS:
             action = sample_action(state, agent.policy_net, epsilon, env.action_space.n)
@@ -136,17 +136,18 @@ def train_agent(
             if global_step % update_freq == 0:
                 agent.update_target_net()
 
-            epsilon = max(epsilon_end, epsilon_decay * epsilon)
+        epsilon = max(epsilon_end, epsilon_decay * epsilon)
 
-        steps_per_episode.append(step)
+        steps_per_episode.append(total_reward)
         moving_avg_steps = np.mean(steps_per_episode)
         print(
-            f"Episode {episode} - {step} steps - MA of {steps_for_MA} steps: {moving_avg_steps:.2f}"
+            f"Episode {episode} - {step} steps - Epsilon {epsilon} - MA of {steps_for_MA} episodes: {moving_avg_steps:.2f}"
         )
 
         # Log total reward after each episode
         with writer.as_default():
             tf.summary.scalar("Total Reward", total_reward, step=episode)
+            tf.summary.scalar("MA", moving_avg_steps, step=episode)
 
 
 def test_agent(env, agent, n_episodes):
