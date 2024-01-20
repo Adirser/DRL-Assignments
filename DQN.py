@@ -9,17 +9,17 @@ from tensorflow.summary import create_file_writer
 from datetime import datetime
 
 RENDER = False
-
+MAX_STEPS = 10000
 hidden_layers_3 = [64, 64, 64]  # For the 3 hidden layer network
 hidden_layers_5 = [64, 64, 64, 64, 64]  # For the 5 hidden layer network
 n_episodes = 1000
 batch_size = 64
 gamma = 0.99
 epsilon_start = 1.0
-epsilon_end = 0.1
-epsilon_decay = 0.993
+epsilon_end = 0.05
+epsilon_decay = 0.997
 learning_rate = 0.001
-update_freq = 1000
+update_freq = 5000
 log_dir = f"logs/DQN_{datetime.now().strftime('%d%m%Y%H%M%S')}"
 
 
@@ -48,6 +48,7 @@ class DQNAgent:
             q_action = tf.reduce_sum(tf.multiply(q_values, masks), axis=1)
             loss = tf.keras.losses.MSE(updated_q_values, q_action)
         grads = tape.gradient(loss, self.policy_net.trainable_variables)
+        grads = [tf.clip_by_value(grad, -1.0, 1.0) for grad in grads]
         return grads, loss
 
 
@@ -94,7 +95,7 @@ def train_agent(
         state = np.expand_dims(state, axis=0)
         epsilon = epsilon_start
 
-        while step < 1000:
+        while step < MAX_STEPS:
             action = sample_action(state, agent.policy_net, epsilon, env.action_space.n)
             next_state, reward, done, _, _ = env.step(action)
             next_state = np.expand_dims(next_state, axis=0)
@@ -102,6 +103,7 @@ def train_agent(
             state = next_state
             total_reward += reward
             step += 1
+            global_step += 1
 
             if done:
                 break
@@ -125,11 +127,10 @@ def train_agent(
                 # Log training loss
                 with writer.as_default():
                     tf.summary.scalar("Loss", loss, step=global_step)
-                global_step += 1
 
-                # Update the target network
-                if global_step % update_freq == 0:
-                    agent.update_target_net()
+            # Update the target network
+            if global_step % update_freq == 0:
+                agent.update_target_net()
 
             epsilon = max(epsilon_end, epsilon_decay * epsilon)
 
