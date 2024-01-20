@@ -19,8 +19,9 @@ epsilon_start = 1.0
 epsilon_end = 0.05
 epsilon_decay = 0.997
 learning_rate = 0.001
-update_freq = 5000
+update_freq = 2000
 log_dir = f"logs/DQN_{datetime.now().strftime('%d%m%Y%H%M%S')}"
+steps_for_MA = 100
 
 
 class DQNAgent:
@@ -38,6 +39,7 @@ class DQNAgent:
         return model
 
     def update_target_net(self):
+        print("UPDATING TARGET NET")
         self.target_net.set_weights(self.policy_net.get_weights())
 
     def train(self, states, actions, updated_q_values, n_actions):
@@ -88,6 +90,8 @@ def train_agent(
     writer,
 ):
     global_step = 0
+    steps_per_episode = deque(maxlen=steps_for_MA)  # Change 100 to your preferred window size
+
     for episode in range(n_episodes):
         total_reward = 0
         step = 0
@@ -134,7 +138,11 @@ def train_agent(
 
             epsilon = max(epsilon_end, epsilon_decay * epsilon)
 
-        print(f"Episode {episode} - {step} steps")
+        steps_per_episode.append(step)
+        moving_avg_steps = np.mean(steps_per_episode)
+        print(
+            f"Episode {episode} - {step} steps - MA of {steps_for_MA} steps: {moving_avg_steps:.2f}"
+        )
 
         # Log total reward after each episode
         with writer.as_default():
