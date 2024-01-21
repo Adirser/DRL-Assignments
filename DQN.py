@@ -11,16 +11,16 @@ from datetime import datetime
 RENDER = False
 MAX_STEPS = 10000
 hidden_layers_3 = [32, 32, 32]
-hidden_layers_5 = [64, 64, 64, 64, 64]
+hidden_layers_5 = [32, 32, 32, 32, 32]
 n_episodes = 1000
 batch_size = 256
 gamma = 0.99
 epsilon_start = 1.0
 epsilon_end = 0.05
-epsilon_decay = 0.97
+epsilon_decay = 0.99
 learning_rate = 0.001
 update_freq = 1000
-log_dir = f"logs/DQN_{datetime.now().strftime('%d%m%Y%H%M%S')}"
+log_dir = f"logs/DQN_3Layerslowdecay_{datetime.now().strftime('%d%m%Y%H%M%S')}"
 steps_for_MA = 100
 
 
@@ -199,7 +199,7 @@ train_agent(
 )
 
 # Save the trained model
-model_save_path = "DQNModel"
+model_save_path = "DQNModel3Layers"
 agent.policy_net.save(model_save_path, save_format="tf")
 
 test_agent(env, agent, 10)
